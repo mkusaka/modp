@@ -27,7 +27,7 @@ func run() error {
 		return err
 	}
 
-	putsDep(root, d, 1)
+	putsDep(root, d, false, "", 1)
 	return nil
 }
 
@@ -56,10 +56,14 @@ func read(in string) (pkg, deps) {
 	return root, dep
 }
 
-func putsDep(p pkg, d deps, depth int) {
-	indent := ""
+func putsDep(p pkg, d deps, eof bool, parentIndent string, depth int) {
+	indent := parentIndent
 	if depth >= 2 {
-		indent = strings.Repeat("│ ", depth-1)
+		if eof {
+			indent += "  "
+		} else {
+			indent += "│ "
+		}
 	}
 
 	if p.root() {
@@ -70,7 +74,8 @@ func putsDep(p pkg, d deps, depth int) {
 	lastIndex := len(children) - 1
 	for i, child := range children {
 		grandchildren := d[child]
-		if i == lastIndex {
+		isLastIndex := i == lastIndex
+		if isLastIndex {
 			if len(grandchildren) >= 1 {
 				fmt.Println(indent + "└─┬" + child.raw)
 			} else {
@@ -85,7 +90,7 @@ func putsDep(p pkg, d deps, depth int) {
 		}
 
 		if len(grandchildren) >= 1 {
-			putsDep(child, d, depth+1)
+			putsDep(child, d, isLastIndex, indent, depth+1)
 		}
 	}
 }
