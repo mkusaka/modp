@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 )
 
@@ -21,21 +22,22 @@ func run() error {
 		return err
 	}
 
-	root, d := read(string(b))
+	root := read(string(b))
 
-	if err != nil {
-		return err
-	}
-
-	putsDep(root, d, false, "", 1)
+	putsDep(root, false, "", 1)
 	return nil
 }
 
-func read(in string) (pkg, deps) {
+type pkgMap = map[string]*pkg
+
+func read(in string) *pkg {
 	lines := strings.Split(in, "\n")
 
-	dep := deps{}
-	root := pkg{}
+	sort.Sort(sort.Reverse(sort.StringSlice(lines)))
+	pkgs := pkgMap{}
+
+	rootRaw := &pkg{}
+
 	for _, line := range lines {
 		if line == "" {
 			continue
@@ -43,20 +45,34 @@ func read(in string) (pkg, deps) {
 		family := strings.SplitN(line, " ", 2)
 		parent := newpkg(family[0])
 		if parent.root() {
-			root = parent
+			rootRaw = parent
 		}
-		child := newpkg(family[1])
-		if children, ok := dep[parent]; ok {
-			dep[parent] = append(children, child)
+		if len(family) == 2 {
+			child := newpkg(family[1])
+			if cachedChild, ok := pkgs[child.raw]; ok {
+				child = cachedChild
+			}
+			if p, ok := pkgs[parent.raw]; ok {
+				p.children = append([]*pkg{child}, p.children...)
+			} else {
+				parent.children = append([]*pkg{child}, parent.children...)
+				pkgs[parent.raw] = parent
+			}
+
+			if _, ok := pkgs[child.raw]; !ok {
+				pkgs[child.raw] = child
+			}
 		} else {
-			dep[parent] = []pkg{child}
+			if _, ok := pkgs[parent.raw]; !ok {
+				pkgs[parent.raw] = parent
+			}
 		}
 	}
 
-	return root, dep
+	return pkgs[rootRaw.raw]
 }
 
-func putsDep(p pkg, d deps, eof bool, parentIndent string, depth int) {
+func putsDep(p *pkg, eof bool, parentIndent string, depth int) {
 	indent := parentIndent
 	if depth >= 2 {
 		if eof {
@@ -70,10 +86,10 @@ func putsDep(p pkg, d deps, eof bool, parentIndent string, depth int) {
 		fmt.Printf("%s%s\n", indent, p.raw)
 	}
 
-	children := d[p]
+	children := p.children
 	lastIndex := len(children) - 1
 	for i, child := range children {
-		grandchildren := d[child]
+		grandchildren := child.children
 		isLastIndex := i == lastIndex
 		if isLastIndex {
 			if len(grandchildren) >= 1 {
@@ -90,13 +106,10 @@ func putsDep(p pkg, d deps, eof bool, parentIndent string, depth int) {
 		}
 
 		if len(grandchildren) >= 1 {
-			putsDep(child, d, isLastIndex, indent, depth+1)
+			putsDep(child, isLastIndex, indent, depth+1)
 		}
 	}
 }
-
-type deps = map[pkg][]pkg
-
 func splitNameVersion(str string) (name string, version string) {
 	pair := strings.SplitN(str, "@", 2)
 	if len(pair) == 2 {
@@ -110,18 +123,19 @@ func splitNameVersion(str string) (name string, version string) {
 }
 
 type pkg struct {
-	name    string
-	version string
-	raw     string
+	name     string
+	version  string
+	raw      string
+	children []*pkg
 }
 
 func (p pkg) root() bool {
 	return p.version == ""
 }
 
-func newpkg(nameversion string) pkg {
+func newpkg(nameversion string) *pkg {
 	name, version := splitNameVersion(nameversion)
-	return pkg{
+	return &pkg{
 		name:    name,
 		version: version,
 		raw:     nameversion,
