@@ -1,4 +1,4 @@
-module github.com/mkusaka/trending
+module github.com/mkusaka/modp
 
 go 1.19
 

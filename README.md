@@ -2,7 +2,9 @@
 pretty print `go mod graph` output
 
 # install
+```
 go install github.com/mkusaka/modp@latest
+```
 
 # usage
 ```
